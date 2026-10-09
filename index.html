@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mappls PIN Code Tester</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f5f7fb;margin:0;color:#172033}
+.wrap{max-width:960px;margin:36px auto;padding:0 20px}
+.card{background:#fff;padding:24px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.08);margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.full{grid-column:1/-1}
+label{display:block;font-weight:700;font-size:13px;margin-bottom:6px}
+input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d0d5dd;border-radius:9px;font-size:15px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+button{border:0;border-radius:9px;padding:12px 16px;font-weight:700;cursor:pointer}
+.primary{background:#111827;color:#fff}.secondary{background:#eef2f6}
+.status{display:none;margin-top:18px;padding:13px;border-radius:10px;line-height:1.5}
+.info{display:block;background:#eef4ff;color:#1d4ed8}.success{display:block;background:#ecfdf3;color:#027a48}
+.warn{display:block;background:#fffaeb;color:#b54708}.error{display:block;background:#fef3f2;color:#b42318}
+.results{display:none;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}
+.result{border:1px solid #eaecf0;border-radius:10px;padding:13px;background:#fcfcfd}
+.result small{display:block;color:#667085;margin-bottom:5px}.pin{font-size:32px}
+pre{background:#101828;color:#e4e7ec;padding:16px;border-radius:10px;overflow:auto;max-height:480px}
+.note{font-size:13px;color:#667085;line-height:1.5;margin-top:14px}
+@media(max-width:720px){.grid,.results{grid-template-columns:1fr}.full{grid-column:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="card">
+<h1>📍 Mappls PIN Code Detection Tester</h1>
+<p>Uses browser GPS + Mappls Reverse Geocoding API.</p>
+
+<div class="grid">
+  <div class="full">
+    <label>Mappls Static Key / access_token</label>
+    <input id="token" type="password" placeholder="Paste Mappls Static Key here">
+  </div>
+  <div>
+    <label>Latitude</label>
+    <input id="lat" value="30.904871">
+  </div>
+  <div>
+    <label>Longitude</label>
+    <input id="lng" value="75.829893">
+  </div>
+  <div>
+    <label>Expected PIN</label>
+    <input id="expectedPin" value="141001" maxlength="6">
+  </div>
+</div>
+
+<div class="actions">
+  <button class="primary" onclick="useCurrentLocation()">📍 Use My Current Location</button>
+  <button class="secondary" onclick="testCoordinates()">Test Lat / Long</button>
+</div>
+
+<div id="status" class="status"></div>
+
+<div id="results" class="results">
+  <div class="result"><small>Detected PIN</small><strong id="pin" class="pin">—</strong></div>
+  <div class="result"><small>PIN Match</small><strong id="match">—</strong></div>
+  <div class="result"><small>Formatted Address</small><strong id="formatted">—</strong></div>
+  <div class="result"><small>City</small><strong id="city">—</strong></div>
+  <div class="result"><small>District</small><strong id="district">—</strong></div>
+  <div class="result"><small>Sub-District</small><strong id="subDistrict">—</strong></div>
+  <div class="result"><small>Locality / Village</small><strong id="locality">—</strong></div>
+  <div class="result"><small>State</small><strong id="state">—</strong></div>
+  <div class="result"><small>Street / POI</small><strong id="street">—</strong></div>
+  <div class="result"><small>GPS Accuracy</small><strong id="accuracy">Manual coordinate test</strong></div>
+</div>
+
+<div class="note">
+Deploy this file as <b>index.html</b> on GitHub Pages. In your Mappls Web App settings,
+whitelist your GitHub Pages origin, for example
+<b>https://kartikmehra31032001-rgb.github.io</b>.
+</div>
+</div>
+
+<div class="card">
+<h2>Raw Mappls API Response</h2>
+<pre id="raw">{ "message": "Run a test to see the response." }</pre>
+</div>
+</div>
+
+<script>
+const API_URL="https://search.mappls.com/search/address/rev-geocode";
+
+function setStatus(msg,type="info"){
+  const el=document.getElementById("status");
+  el.className="status "+type;
+  el.textContent=msg;
+}
+function cleanPin(v){return String(v||"").replace(/\D/g,"").trim();}
+
+function renderResult(r,accuracyText){
+  const detected=cleanPin(r.pincode);
+  const expected=cleanPin(document.getElementById("expectedPin").value);
+  document.getElementById("results").style.display="grid";
+  document.getElementById("pin").textContent=detected||"Not returned";
+  document.getElementById("formatted").textContent=r.formatted_address||"—";
+  document.getElementById("city").textContent=r.city||"—";
+  document.getElementById("district").textContent=r.district||"—";
+  document.getElementById("subDistrict").textContent=r.subDistrict||"—";
+  document.getElementById("locality").textContent=r.locality||r.subLocality||r.village||"—";
+  document.getElementById("state").textContent=r.state||"—";
+  document.getElementById("street").textContent=[r.street,r.poi].filter(Boolean).join(" / ")||"—";
+  document.getElementById("accuracy").textContent=accuracyText;
+
+  if(!detected){
+    document.getElementById("match").textContent="⚠️ No PIN returned";
+    setStatus("Mappls found the location but did not return a PIN.","warn");
+  }else if(expected && detected===expected){
+    document.getElementById("match").textContent="✅ Correct — matches "+expected;
+    setStatus("Success: Mappls detected PIN "+detected+".","success");
+  }else if(expected){
+    document.getElementById("match").textContent="❌ Expected "+expected;
+    setStatus("Mappls detected "+detected+", but expected PIN is "+expected+".","error");
+  }else{
+    document.getElementById("match").textContent="No expected PIN entered";
+    setStatus("Mappls detected PIN "+detected+".","success");
+  }
+}
+
+async function reverseGeocode(lat,lng,accuracyText="Manual coordinate test"){
+  const token=document.getElementById("token").value.trim();
+  if(!token){setStatus("Paste your Mappls Static Key first.","error");return;}
+
+  setStatus("Calling Mappls Reverse Geocoding API...","info");
+  const url=API_URL+"?lat="+encodeURIComponent(lat)+"&lng="+encodeURIComponent(lng)+"&access_token="+encodeURIComponent(token);
+
+  try{
+    const res=await fetch(url,{headers:{"Accept":"application/json"}});
+    const text=await res.text();
+    let data;
+    try{data=JSON.parse(text);}
+    catch{
+      document.getElementById("raw").textContent=text;
+      throw new Error("Mappls returned HTTP "+res.status+" with a non-JSON response.");
+    }
+
+    document.getElementById("raw").textContent=JSON.stringify(data,null,2);
+
+    if(!res.ok) throw new Error("Mappls request failed: HTTP "+res.status+" "+(data.message||data.error||""));
+    if(data.responseCode && Number(data.responseCode)!==200) throw new Error("Mappls responseCode: "+data.responseCode);
+
+    const result=Array.isArray(data.results)?data.results[0]:null;
+    if(!result){
+      document.getElementById("results").style.display="none";
+      setStatus("No address result returned for these coordinates.","warn");
+      return;
+    }
+    renderResult(result,accuracyText);
+  }catch(e){
+    console.error(e);
+    setStatus(e.message,"error");
+  }
+}
+
+function testCoordinates(){
+  const lat=document.getElementById("lat").value.trim();
+  const lng=document.getElementById("lng").value.trim();
+  if(!lat||!lng){setStatus("Enter both latitude and longitude.","error");return;}
+  reverseGeocode(lat,lng);
+}
+
+function useCurrentLocation(){
+  if(!navigator.geolocation){setStatus("Geolocation is not supported by this browser.","error");return;}
+  setStatus("Requesting your device location...","info");
+  navigator.geolocation.getCurrentPosition(
+    p=>{
+      const {latitude,longitude,accuracy}=p.coords;
+      document.getElementById("lat").value=latitude;
+      document.getElementById("lng").value=longitude;
+      reverseGeocode(latitude,longitude,Math.round(accuracy)+" meters");
+    },
+    e=>setStatus(e.message||"Unable to get current location.","error"),
+    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
+  );
+}
+</script>
+</body>
+</html>
